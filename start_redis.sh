@@ -1,0 +1,1 @@
+docker run --rm --name test-redis-instance -p 127.0.0.1:6379:6379 redis
