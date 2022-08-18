@@ -1,18 +1,21 @@
+from cmath import log
 from aiohttp import web
 from aiohttp.web import json_response, run_app
 from redis import Redis
-from app.entities import Alert
-from .producer import Producer
-from .consumer import Consumer
+from entities import Alert
+from producer import Producer
+from consumer import Consumer
 import asyncio
-import time
 import settings
 import random
 import dataclasses
 import uuid
 import json
+import logging
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 async def create_app():
     app = web.Application() 
     setup_register_route(app)
@@ -30,14 +33,14 @@ async def register_alert(request: web.Request):
     alert_key = str(uuid.uuid4())
     alert_queue_key = str(uuid.uuid4())
     
-    num_msgs_to_send = request_json.get('n_msgs', 1000)
+    num_msgs_to_send = int(request_json.get('n_msgs', 1000))
     redis.set(alert_key, json.dumps(
         dataclasses.asdict(Alert(
             queue_id = alert_queue_key,
             n_msgs = num_msgs_to_send,
-            fail_rate = request_json['fail_rate'],
-            num_senders=request_json['num_senders'],
-            poll_rate=request_json['poll_rate']
+            fail_rate = float(request_json['fail_rate']),
+            num_senders=int(request_json['num_senders']),
+            poll_rate=int(request_json['poll_rate'])
         ))
     ))
     redis.set(f'{alert_key}.num_passed', 0)
@@ -52,8 +55,10 @@ async def register_alert(request: web.Request):
 async def execute_alert(request: web.Request):
     redis = Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
     request_json = await request.json()
+    logger.info(f"starting job {request_json['id']}")
     redis_payload = json.loads(redis.get(request_json['id']))
-    for _ in range(redis_payload['num_senders']):
+    for _ in range(int(redis_payload['num_senders'])):
+        logger.info("Spinning up worker")
         asyncio.create_task(execute_alert_job(request_json['id']))
     
 async def execute_alert_job(alert_entity_id):
@@ -66,7 +71,7 @@ async def execute_alert_job(alert_entity_id):
         if not alert_id:
             break 
         payload = next(notification_provider)
-        time.sleep(abs(random.normalvariate(settings.MEAN_SEND_TIME, 0.25)))
+        await asyncio.sleep(abs(random.normalvariate(settings.MEAN_SEND_TIME, 0.25)))
         if random.random() > alert_instance['fail_rate']:
             notification_consumer.consume(payload)
             redis_conn.incrby(f'{alert_entity_id}.num_passed', 1)
