@@ -16,9 +16,9 @@ export default function AlertForm (props)  {
             method: 'POST',
         }).then( (rsp) => {
             rsp.json().then( (data) => {
-                console.log(data)
                 props.setAlertId(data.id)
                 props.setPollRate(values.poll_rate)
+                props.setAlertLoaded(true)
             })
         })
       }}
