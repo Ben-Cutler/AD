@@ -14,8 +14,9 @@ import json
 import logging
 
 
+logging.basicConfig()
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 async def create_app():
     app = web.Application() 
     setup_register_route(app)
@@ -27,6 +28,7 @@ def setup_register_route(app):
     app.router.add_route('GET', '/api/v1/alerts', get_alert)
 
 async def register_alert(request: web.Request):
+    logger.debug("Registering Alert")
     redis = Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
     request_json = await request.json()
     
@@ -60,6 +62,7 @@ async def execute_alert(request: web.Request):
     for _ in range(int(redis_payload['num_senders'])):
         logger.info("Spinning up worker")
         asyncio.create_task(execute_alert_job(request_json['id']))
+    return web.Response(status=200)
     
 async def execute_alert_job(alert_entity_id):
     redis_conn = Redis(host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB)
